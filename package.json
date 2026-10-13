@@ -1,0 +1,13 @@
+{
+  "name": "nexus-proxy-terminal",
+  "version": "2.4.1",
+  "description": "Liquid glass hacker terminal web proxy",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "vercel": "^37.0.0"
+  }
+}

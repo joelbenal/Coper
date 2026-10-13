@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "functions": {
+    "api/proxy.js": {
+      "runtime": "edge"
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/proxy",
+      "dest": "/api/proxy.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "ALLOWALL" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors *; default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;"
+        }
+      ]
+    }
+  ]
+}

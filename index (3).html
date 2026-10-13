@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS // PROXY TERMINAL</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --glass-bg: rgba(8, 14, 24, 0.72);
+    --glass-border: rgba(0, 255, 136, 0.18);
+    --glass-blur: blur(28px) saturate(1.6);
+    --neon-green: #00ff88;
+    --neon-cyan: #00e5ff;
+    --neon-purple: #bf00ff;
+    --neon-red: #ff003c;
+    --dim-green: rgba(0, 255, 136, 0.45);
+    --text-primary: #c8ffe0;
+    --text-muted: rgba(200, 255, 224, 0.42);
+    --bg-deep: #010810;
+    --scanline-opacity: 0.022;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    font-family: 'JetBrains Mono', 'Share Tech Mono', monospace;
+    color: var(--text-primary);
+    overflow: hidden;
+  }
+
+  /* Grid bg */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none;
+  }
+
+  /* Scanlines */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,var(--scanline-opacity)) 2px,
+      rgba(0,0,0,var(--scanline-opacity)) 4px
+    );
+    pointer-events: none;
+    animation: scanroll 8s linear infinite;
+  }
+
+  @keyframes scanroll {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 -800px; }
+  }
+
+  /* ── LAYOUT ── */
+  #root {
+    position: relative; z-index: 1;
+    height: 100vh;
+    display: flex; flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  /* ── HEADER BAR ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 10px;
+    padding: 10px 18px;
+    box-shadow: 0 0 32px rgba(0,255,136,0.06), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .header-left {
+    display: flex; align-items: center; gap: 14px;
+  }
+
+  .logo {
+    font-size: 15px; font-weight: 700; letter-spacing: 0.12em;
+    color: var(--neon-green);
+    text-shadow: 0 0 14px rgba(0,255,136,0.7);
+  }
+
+  .logo span { color: var(--neon-cyan); text-shadow: 0 0 14px rgba(0,229,255,0.7); }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 8px var(--neon-green);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  .header-stats {
+    display: flex; gap: 24px;
+    font-size: 10px; color: var(--text-muted);
+  }
+
+  .stat-item { display: flex; flex-direction: column; align-items: flex-end; }
+  .stat-val  { color: var(--neon-cyan); font-size: 11px; }
+
+  /* ── URL BAR ── */
+  .url-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 10px;
+    padding: 14px 18px;
+    box-shadow: 0 0 24px rgba(0,255,136,0.04), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .terminal-prompt {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .prompt-label {
+    color: var(--neon-green); font-size: 12px;
+    text-shadow: 0 0 8px var(--neon-green);
+    white-space: nowrap;
+  }
+
+  .url-input-wrap {
+    position: relative; flex: 1;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  #urlInput {
+    flex: 1;
+    background: rgba(0, 255, 136, 0.04);
+    border: 1px solid rgba(0, 255, 136, 0.22);
+    border-radius: 6px;
+    padding: 9px 14px;
+    color: var(--text-primary);
+    font-family: inherit; font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    caret-color: var(--neon-green);
+  }
+
+  #urlInput::placeholder { color: var(--text-muted); }
+
+  #urlInput:focus {
+    border-color: rgba(0, 255, 136, 0.6);
+    box-shadow: 0 0 16px rgba(0,255,136,0.12);
+  }
+
+  .btn-go {
+    background: linear-gradient(135deg, rgba(0,255,136,0.16), rgba(0,229,255,0.10));
+    border: 1px solid rgba(0,255,136,0.38);
+    border-radius: 6px;
+    color: var(--neon-green);
+    font-family: inherit; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 9px 20px;
+    cursor: pointer;
+    transition: all 0.18s;
+    text-shadow: 0 0 8px var(--neon-green);
+    white-space: nowrap;
+  }
+
+  .btn-go:hover {
+    background: linear-gradient(135deg, rgba(0,255,136,0.28), rgba(0,229,255,0.18));
+    box-shadow: 0 0 20px rgba(0,255,136,0.28);
+    transform: translateY(-1px);
+  }
+
+  .btn-go:active { transform: translateY(0); }
+
+  .btn-go.loading {
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* quick nav */
+  .quick-nav {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+  }
+
+  .quick-btn {
+    background: rgba(0,229,255,0.06);
+    border: 1px solid rgba(0,229,255,0.18);
+    border-radius: 4px;
+    color: rgba(0,229,255,0.7);
+    font-family: inherit; font-size: 10px;
+    padding: 3px 10px; cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .quick-btn:hover {
+    background: rgba(0,229,255,0.14);
+    border-color: rgba(0,229,255,0.4);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(0,229,255,0.15);
+  }
+
+  /* ── MAIN AREA ── */
+  .main-area {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    display: flex; flex-direction: column; gap: 10px;
+    min-height: 0;
+  }
+
+  .glass-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 0 24px rgba(0,255,136,0.04), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .panel-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.18em;
+    color: var(--neon-green); text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(0,255,136,0.1);
+    text-shadow: 0 0 8px rgba(0,255,136,0.5);
+  }
+
+  /* history */
+  .history-list {
+    display: flex; flex-direction: column; gap: 4px;
+    overflow-y: auto; max-height: 140px;
+  }
+
+  .history-list::-webkit-scrollbar { width: 3px; }
+  .history-list::-webkit-scrollbar-track { background: transparent; }
+  .history-list::-webkit-scrollbar-thumb { background: rgba(0,255,136,0.2); border-radius: 2px; }
+
+  .hist-item {
+    font-size: 10px; color: var(--text-muted);
+    padding: 4px 6px; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border: 1px solid transparent;
+  }
+
+  .hist-item:hover {
+    background: rgba(0,255,136,0.06);
+    border-color: rgba(0,255,136,0.15);
+    color: var(--neon-green);
+  }
+
+  /* traffic log */
+  .log-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  .log-body {
+    flex: 1; overflow-y: auto;
+    font-size: 9.5px; line-height: 1.65;
+    color: var(--text-muted);
+  }
+
+  .log-body::-webkit-scrollbar { width: 3px; }
+  .log-body::-webkit-scrollbar-thumb { background: rgba(0,255,136,0.2); border-radius: 2px; }
+
+  .log-line { display: flex; gap: 6px; }
+  .log-time { color: rgba(0,229,255,0.4); flex-shrink: 0; }
+  .log-msg.ok  { color: rgba(0,255,136,0.55); }
+  .log-msg.err { color: rgba(255,0,60,0.6); }
+  .log-msg.info{ color: rgba(0,229,255,0.5); }
+
+  /* ── VIEWPORT ── */
+  .viewport-wrap {
+    position: relative;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(0,255,136,0.05), inset 0 1px 0 rgba(255,255,255,0.05);
+    display: flex; flex-direction: column;
+  }
+
+  .viewport-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(0,255,136,0.1);
+    background: rgba(0,0,0,0.2);
+    flex-shrink: 0;
+  }
+
+  .viewport-url {
+    font-size: 10px; color: var(--text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 70%;
+  }
+
+  .viewport-controls {
+    display: flex; gap: 8px; align-items: center;
+  }
+
+  .ctrl-btn {
+    background: rgba(0,255,136,0.06);
+    border: 1px solid rgba(0,255,136,0.15);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-family: inherit; font-size: 10px;
+    padding: 3px 10px; cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .ctrl-btn:hover {
+    background: rgba(0,255,136,0.12);
+    color: var(--neon-green);
+    border-color: rgba(0,255,136,0.3);
+  }
+
+  #frame {
+    flex: 1;
+    width: 100%; border: none;
+    background: #fff;
+  }
+
+  /* idle screen */
+  .idle-screen {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    color: var(--text-muted);
+  }
+
+  .idle-ascii {
+    font-size: 11px; line-height: 1.4;
+    color: rgba(0,255,136,0.22);
+    text-align: center;
+    white-space: pre;
+    user-select: none;
+  }
+
+  .idle-text { font-size: 12px; text-align: center; }
+
+  /* loading overlay */
+  .loading-overlay {
+    position: absolute; inset: 0;
+    background: rgba(1,8,16,0.88);
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    z-index: 10;
+  }
+
+  .loading-overlay.show { display: flex; }
+
+  .loader-bar-wrap {
+    width: 240px; height: 2px;
+    background: rgba(0,255,136,0.1);
+    border-radius: 2px; overflow: hidden;
+  }
+
+  .loader-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+    box-shadow: 0 0 10px var(--neon-green);
+    animation: loaderAnim 1.4s ease-in-out infinite;
+  }
+
+  @keyframes loaderAnim {
+    0%   { width: 0%;   margin-left: 0%; }
+    50%  { width: 60%;  margin-left: 20%; }
+    100% { width: 0%;   margin-left: 100%; }
+  }
+
+  .loader-text {
+    font-size: 11px; color: var(--neon-green);
+    text-shadow: 0 0 8px var(--neon-green);
+    letter-spacing: 0.15em;
+  }
+
+  /* error panel */
+  .error-panel {
+    display: none;
+    margin: 12px;
+    background: rgba(255,0,60,0.06);
+    border: 1px solid rgba(255,0,60,0.22);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 12px; color: rgba(255,0,60,0.85);
+  }
+
+  .error-panel.show { display: block; }
+  .error-title { font-weight: 700; margin-bottom: 6px; }
+
+  /* Corner glow accents */
+  .glow-tl, .glow-br {
+    position: fixed; width: 320px; height: 320px;
+    border-radius: 50%; filter: blur(100px);
+    pointer-events: none; z-index: 0;
+    opacity: 0.07;
+  }
+
+  .glow-tl {
+    top: -100px; left: -100px;
+    background: radial-gradient(circle, var(--neon-green), transparent 70%);
+  }
+
+  .glow-br {
+    bottom: -100px; right: -100px;
+    background: radial-gradient(circle, var(--neon-purple), transparent 70%);
+  }
+
+  /* responsive */
+  @media (max-width: 800px) {
+    .main-area { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .sidebar { flex-direction: row; max-height: 160px; }
+    .log-panel { min-height: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow-tl"></div>
+<div class="glow-br"></div>
+
+<div id="root">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="status-dot"></div>
+      <div class="logo">NEXUS<span>://</span>PROXY</div>
+      <div style="font-size:10px; color:var(--text-muted); letter-spacing:0.08em;">v2.4.1 — SECURE CHANNEL</div>
+    </div>
+    <div class="header-stats">
+      <div class="stat-item">
+        <span style="font-size:9px;">REQUESTS</span>
+        <span class="stat-val" id="reqCount">0</span>
+      </div>
+      <div class="stat-item">
+        <span style="font-size:9px;">SESSION</span>
+        <span class="stat-val" id="sessionTime">00:00</span>
+      </div>
+      <div class="stat-item">
+        <span style="font-size:9px;">STATUS</span>
+        <span class="stat-val" id="statusLabel">IDLE</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- URL BAR -->
+  <div class="url-panel">
+    <div class="terminal-prompt">
+      <span class="prompt-label">root@nexus:~$</span>
+      <div class="url-input-wrap">
+        <input
+          type="text"
+          id="urlInput"
+          placeholder="curl https://target.url — enter destination..."
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        />
+        <button class="btn-go" id="btnGo" onclick="navigate()">[ EXECUTE ]</button>
+      </div>
+    </div>
+    <div class="quick-nav">
+      <button class="quick-btn" onclick="loadQuick('https://www.google.com')">google</button>
+      <button class="quick-btn" onclick="loadQuick('https://www.reddit.com')">reddit</button>
+      <button class="quick-btn" onclick="loadQuick('https://github.com')">github</button>
+      <button class="quick-btn" onclick="loadQuick('https://wikipedia.org')">wikipedia</button>
+      <button class="quick-btn" onclick="loadQuick('https://news.ycombinator.com')">hn</button>
+      <button class="quick-btn" onclick="loadQuick('https://youtube.com')">youtube</button>
+      <button class="quick-btn" onclick="loadQuick('https://twitter.com')">twitter</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-area">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <div class="glass-panel">
+        <div class="panel-title">▸ HISTORY</div>
+        <div class="history-list" id="historyList">
+          <div style="font-size:10px; color:var(--text-muted);">— no entries —</div>
+        </div>
+      </div>
+
+      <div class="glass-panel log-panel">
+        <div class="panel-title">▸ TRAFFIC LOG</div>
+        <div class="log-body" id="logBody"></div>
+      </div>
+
+    </div>
+
+    <!-- VIEWPORT -->
+    <div class="viewport-wrap" id="viewportWrap">
+
+      <div class="viewport-bar">
+        <div class="viewport-url" id="viewportUrl">— awaiting target —</div>
+        <div class="viewport-controls">
+          <button class="ctrl-btn" onclick="reloadFrame()">↺ RELOAD</button>
+          <button class="ctrl-btn" onclick="openExternal()">⇗ OPEN</button>
+          <button class="ctrl-btn" onclick="clearFrame()">✕ CLEAR</button>
+        </div>
+      </div>
+
+      <!-- Idle state -->
+      <div class="idle-screen" id="idleScreen">
+        <pre class="idle-ascii">
+ ███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
+ ████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
+ ██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
+ ██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
+ ██║ ╚████║███████╗██╔╝ ██╗╚██████╔╝███████║
+ ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝</pre>
+        <div class="idle-text">
+          <span style="color:var(--neon-green);">PROXY CHANNEL OPEN</span><br>
+          <span style="font-size:11px;">Enter a URL to begin routing traffic</span>
+        </div>
+      </div>
+
+      <!-- Loading overlay -->
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader-text" id="loaderText">ROUTING TRAFFIC...</div>
+        <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+        <div style="font-size:9px; color:var(--text-muted); letter-spacing:0.12em;" id="loaderSub">ESTABLISHING TUNNEL</div>
+      </div>
+
+      <!-- Error panel -->
+      <div class="error-panel" id="errorPanel">
+        <div class="error-title">⚠ ROUTE FAILED</div>
+        <div id="errorMsg"></div>
+      </div>
+
+      <!-- iFrame -->
+      <iframe
+        id="frame"
+        style="display:none;"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-top-navigation"
+        allow="fullscreen"
+        referrerpolicy="no-referrer"
+      ></iframe>
+
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ── State ── */
+  let reqCount  = 0;
+  let sessionStart = Date.now();
+  let history   = [];
+  let currentUrl = '';
+
+  /* ── Session timer ── */
+  setInterval(() => {
+    const s  = Math.floor((Date.now() - sessionStart) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2,'0');
+    const ss = String(s % 60).padStart(2,'0');
+    document.getElementById('sessionTime').textContent = `${mm}:${ss}`;
+  }, 1000);
+
+  /* ── Log ── */
+  function log(msg, type='info') {
+    const body  = document.getElementById('logBody');
+    const now   = new Date();
+    const t     = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    const line  = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = `<span class="log-time">[${t}]</span><span class="log-msg ${type}">${msg}</span>`;
+    body.appendChild(line);
+    body.scrollTop = body.scrollHeight;
+    // cap at 120 lines
+    while (body.children.length > 120) body.removeChild(body.firstChild);
+  }
+
+  /* ── History ── */
+  function addHistory(url) {
+    history = [url, ...history.filter(u => u !== url)].slice(0, 30);
+    const list = document.getElementById('historyList');
+    list.innerHTML = '';
+    history.forEach(u => {
+      const el = document.createElement('div');
+      el.className = 'hist-item';
+      el.textContent = u.replace(/^https?:\/\//, '');
+      el.title = u;
+      el.onclick = () => loadUrl(u);
+      list.appendChild(el);
+    });
+  }
+
+  /* ── URL normalisation ── */
+  function normalizeUrl(raw) {
+    raw = raw.trim();
+    if (!raw) return null;
+    if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+    try { new URL(raw); return raw; }
+    catch { return null; }
+  }
+
+  /* ── Navigate ── */
+  function navigate() {
+    const input = document.getElementById('urlInput').value;
+    const url   = normalizeUrl(input);
+    if (!url) { log('invalid target: ' + input, 'err'); return; }
+    loadUrl(url);
+  }
+
+  function loadQuick(url) {
+    document.getElementById('urlInput').value = url;
+    loadUrl(url);
+  }
+
+  function loadUrl(url) {
+    currentUrl = url;
+    reqCount++;
+    document.getElementById('reqCount').textContent = reqCount;
+    document.getElementById('statusLabel').textContent = 'ROUTING';
+    document.getElementById('viewportUrl').textContent = url;
+
+    // Show loading
+    const overlay = document.getElementById('loadingOverlay');
+    const msgs = ['ROUTING TRAFFIC...','BYPASSING FILTERS...','TUNNELING REQUEST...','INJECTING HEADERS...','DECODING RESPONSE...'];
+    let mi = 0;
+    overlay.classList.add('show');
+    document.getElementById('loaderText').textContent = msgs[0];
+    document.getElementById('idleScreen').style.display = 'none';
+    document.getElementById('frame').style.display = 'none';
+    document.getElementById('errorPanel').classList.remove('show');
+
+    const msgInterval = setInterval(() => {
+      mi = (mi + 1) % msgs.length;
+      document.getElementById('loaderText').textContent = msgs[mi];
+    }, 900);
+
+    log('> TARGET: ' + url, 'info');
+
+    // Build proxy URL
+    const proxyUrl = buildProxyUrl(url);
+    document.getElementById('loaderSub').textContent = 'VIA: ' + (proxyUrl.length > 40 ? proxyUrl.slice(0,40)+'…' : proxyUrl);
+
+    const frame = document.getElementById('frame');
+
+    // Timeout failsafe
+    let loaded = false;
+    const timeout = setTimeout(() => {
+      if (!loaded) {
+        clearInterval(msgInterval);
+        overlay.classList.remove('show');
+        document.getElementById('statusLabel').textContent = 'TIMEOUT';
+        showError('Connection timed out. Target may be blocking proxy requests.', url);
+        log('✗ TIMEOUT: ' + url, 'err');
+      }
+    }, 18000);
+
+    frame.onload = () => {
+      loaded = true;
+      clearTimeout(timeout);
+      clearInterval(msgInterval);
+      overlay.classList.remove('show');
+      frame.style.display = 'block';
+      document.getElementById('statusLabel').textContent = 'LIVE';
+      addHistory(url);
+      log('✓ LOADED: ' + url, 'ok');
+    };
+
+    frame.onerror = () => {
+      loaded = true;
+      clearTimeout(timeout);
+      clearInterval(msgInterval);
+      overlay.classList.remove('show');
+      document.getElementById('statusLabel').textContent = 'ERROR';
+      showError('Frame load error. Try a different proxy method.', url);
+      log('✗ FRAME ERR: ' + url, 'err');
+    };
+
+    frame.src = proxyUrl;
+  }
+
+  /* ── Proxy engine ── */
+  // Free proxy services rotated for resilience
+  const PROXIES = [
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,           // corsproxy.io - no header inject
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,  // allorigins
+    u => `https://thingproxy.freeboard.io/fetch/${u}`,                   // thingproxy
+  ];
+
+  // For iframe embedding we use services that return the page itself browsably:
+  // The most effective free web proxy for iframe embed:
+  const IFRAME_PROXIES = [
+    u => `https://proxysite.one/browse.php?u=${encodeURIComponent(btoa(u))}&b=4&f=norefer`,
+    u => `https://www.proxysite.com/browse.php?u=${encodeURIComponent(u)}&b=9`,
+    u => `https://hide.me/en/proxy?url=${encodeURIComponent(u)}`,
+    u => `https://www.blockaway.net/browse.php?u=${encodeURIComponent(u)}&b=5`,
+    u => `https://www.croxyproxy.com/requests?requestUrl=${encodeURIComponent(u)}`,
+  ];
+
+  let proxyIndex = 0;
+
+  function buildProxyUrl(url) {
+    const p = IFRAME_PROXIES[proxyIndex % IFRAME_PROXIES.length];
+    return p(url);
+  }
+
+  /* ── Error display ── */
+  function showError(msg, url) {
+    const panel = document.getElementById('errorPanel');
+    document.getElementById('errorMsg').innerHTML =
+      msg +
+      `<br><br><span style="color:var(--text-muted);font-size:10px;">Try rotating proxy: <button class="ctrl-btn" style="display:inline;padding:2px 8px;" onclick="rotateProxy('${url}')">ROTATE</button></span>`;
+    panel.classList.add('show');
+    document.getElementById('frame').style.display = 'none';
+  }
+
+  function rotateProxy(url) {
+    proxyIndex++;
+    log(`⟳ ROTATING → proxy ${proxyIndex % IFRAME_PROXIES.length}`, 'info');
+    loadUrl(url || currentUrl);
+  }
+
+  /* ── Controls ── */
+  function reloadFrame() {
+    if (currentUrl) loadUrl(currentUrl);
+  }
+
+  function openExternal() {
+    if (currentUrl) window.open(currentUrl, '_blank');
+  }
+
+  function clearFrame() {
+    document.getElementById('frame').src = 'about:blank';
+    document.getElementById('frame').style.display = 'none';
+    document.getElementById('idleScreen').style.display = 'flex';
+    document.getElementById('errorPanel').classList.remove('show');
+    document.getElementById('viewportUrl').textContent = '— awaiting target —';
+    document.getElementById('statusLabel').textContent = 'IDLE';
+    currentUrl = '';
+    log('channel cleared', 'info');
+  }
+
+  /* ── Keyboard ── */
+  document.getElementById('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') navigate();
+  });
+
+  /* ── Boot log ── */
+  function boot() {
+    const lines = [
+      ['NEXUS PROXY TERMINAL v2.4.1 — INITIALIZED', 'ok'],
+      ['GLASS RENDERER: ACTIVE', 'ok'],
+      ['PROXY CHAIN: LOADED (' + IFRAME_PROXIES.length + ' nodes)', 'ok'],
+      ['FILTER EVASION: ENABLED', 'ok'],
+      ['AWAITING TARGET URL...', 'info'],
+    ];
+    let i = 0;
+    const t = setInterval(() => {
+      if (i >= lines.length) { clearInterval(t); return; }
+      log(lines[i][0], lines[i][1]);
+      i++;
+    }, 220);
+  }
+
+  boot();
+
+  /* ── Receive in-page nav from proxied frame ── */
+  window.addEventListener('message', e => {
+    if (e.data && e.data.type === 'NEXUS_NAV' && e.data.url) {
+      log('↳ IN-PAGE NAV: ' + e.data.url, 'info');
+      document.getElementById('urlInput').value = e.data.url;
+      loadUrl(e.data.url);
+    }
+  });
+</script>
+</body>
+</html>
